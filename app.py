@@ -116,7 +116,7 @@ def normalize(text: str) -> str:
 @st.cache_data(ttl=300)
 def load_excel():
     if FAQ_DRIVE_FILE_ID:
-        url = f"https://drive.google.com/uc?export=download&id={FAQ_DRIVE_FILE_ID}"
+        url = f"https://docs.google.com/spreadsheets/d/{FAQ_DRIVE_FILE_ID}/export?format=xlsx"
         r = requests.get(url, timeout=20)
         r.raise_for_status()
         content = io.BytesIO(r.content)
