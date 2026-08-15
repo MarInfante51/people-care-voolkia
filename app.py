@@ -292,6 +292,7 @@ def find_faq(question, faqs):
     q = normalize(question)
     best = None
     best_score = 0
+    second_score = 0
 
     active = faqs[
         faqs["Activo"]
@@ -299,6 +300,8 @@ def find_faq(question, faqs):
         .str.lower()
         .isin(["sí", "si", "true", "1"])
     ]
+
+    scores = []
 
     for _, row in active.iterrows():
         searchable = (
@@ -312,12 +315,198 @@ def find_faq(question, faqs):
             fuzz.partial_ratio(q, normalize(row["Pregunta"])),
         )
 
-        if score > best_score:
-            best_score = score
-            best = row
+        scores.append((score, row))
 
-    return best, best_score
+    scores.sort(key=lambda x: x[0], reverse=True)
 
+    if scores:
+        best_score, best = scores[0]
+
+    if len(scores) > 1:
+        second_score = scores[1][0]
+
+    return best, best_score, second_score
+
+
+def is_contextual_followup(question):
+    q = normalize(question)
+
+    if len(q.split()) <= 7:
+        return True
+
+    starters = (
+        "y como",
+        "como hago",
+        "como lo hago",
+        "como solicito",
+        "como pido",
+        "donde",
+        "y eso",
+        "y ahi",
+        "y despues",
+        "que hago",
+        "a quien",
+    )
+
+    return q.startswith(starters)
+
+
+def get_contextual_query(question):
+    """
+    Para preguntas cortas o de seguimiento, agrega el último tema conversado.
+    No cambia la respuesta: solo mejora la búsqueda de la FAQ correcta.
+    """
+    if not is_contextual_followup(question):
+        return question
+
+    previous_user = ""
+    previous_assistant = ""
+
+    for msg in reversed(st.session_state.messages[:-1]):
+        if not previous_assistant and msg["role"] == "assistant":
+            previous_assistant = str(msg["content"])
+        elif not previous_user and msg["role"] == "user":
+            previous_user = str(msg["content"])
+
+        if previous_user and previous_assistant:
+            break
+
+    context = f"{previous_user} {previous_assistant}".strip()
+
+    if context:
+        return f"{question} CONTEXTO ANTERIOR: {context}"
+
+    return question
+
+
+def direct_people_care_contact(question):
+    q = normalize(question)
+
+    mentions_people_care = (
+        "people care" in q
+        or "ppc" in q
+        or "recursos humanos" in q
+        or "rrhh" in q
+        or "hr" in q
+    )
+
+    contact_intent = any(
+        phrase in q
+        for phrase in [
+            "como contacto",
+            "como escribo",
+            "como solicito",
+            "como pido",
+            "como hablo",
+            "donde escribo",
+            "a que mail",
+            "cual es el mail",
+            "mail de",
+            "correo de",
+        ]
+    )
+
+    if mentions_people_care and contact_intent:
+        return (
+            "Podés contactar a People Care enviando un mail a "
+            "ppc@voolkia.com."
+        )
+
+    return None
+
+
+
+def detect_human_state(question):
+    q = normalize(question)
+
+    frustration_terms = [
+        "no me responden",
+        "no me dan respuesta",
+        "nadie me responde",
+        "hace dias",
+        "hace 2 dias",
+        "hace 3 dias",
+        "hace 4 dias",
+        "hace una semana",
+        "estoy cansado",
+        "estoy cansada",
+        "estoy enojado",
+        "estoy enojada",
+        "estoy molesto",
+        "estoy molesta",
+        "esto no sirve",
+        "no sirve",
+        "boludear",
+        "me estan dando vueltas",
+        "me dan vueltas",
+        "quiero hablar con alguien",
+        "necesito hablar con alguien",
+    ]
+
+    if any(term in q for term in frustration_terms):
+        return "frustration"
+
+    return None
+
+
+def humanized_no_answer(question):
+    name = st.session_state.get("nombre", "").strip()
+    prefix = f"{name}, " if name else ""
+
+    return (
+        f"{prefix}entiendo la consulta. En este momento no tengo una respuesta "
+        "validada sobre ese tema en la base de People Care, y prefiero no darte "
+        "información que pueda ser incorrecta. Voy a dejarla identificada para "
+        "que People Care pueda revisarla."
+    )
+
+
+def humanized_clarification():
+    name = st.session_state.get("nombre", "").strip()
+    prefix = f"{name}, " if name else ""
+
+    return (
+        f"{prefix}quiero asegurarme de entenderte bien para no responderte cualquier cosa. "
+        "¿Podés contarme un poco más sobre qué necesitás?"
+    )
+
+
+def humanized_frustration_response():
+    name = st.session_state.get("nombre", "").strip()
+    prefix = f"{name}, " if name else ""
+
+    return (
+        f"{prefix}entiendo la frustración. Si ya venís esperando una respuesta, "
+        "no quiero que sigas dando vueltas con el mismo tema. Voy a dejar esta "
+        "situación marcada para atención personalizada de People Care. "
+        "Si querés, también podés escribir directamente a ppc@voolkia.com."
+    )
+
+
+def humanized_bot_complaint_response():
+    name = st.session_state.get("nombre", "").strip()
+    prefix = f"{name}, " if name else ""
+
+    return (
+        f"{prefix}entiendo lo que decís. La idea de este bot es justamente darte "
+        "respuestas rápidas cuando la información está validada y no hacerte perder "
+        "tiempo. Si no tengo una respuesta segura, prefiero decirlo y derivar el tema "
+        "a People Care antes que inventar. Podés contarme qué necesitás resolver y "
+        "lo intento de nuevo."
+    )
+
+
+def is_bot_complaint(question):
+    q = normalize(question)
+    complaint_terms = [
+        "este bot",
+        "el bot",
+        "esto no sirve",
+        "boludear",
+        "me hace perder tiempo",
+        "perder tiempo",
+    ]
+    return any(term in q for term in complaint_terms)
 
 def detect_alert(question, alertas):
     q = normalize(question)
@@ -637,9 +826,49 @@ if send:
 
         direct_alert = detect_alert(question, alertas)
         repeated = st.session_state.question_counts[normalized_question] >= 3
-        faq, score = find_faq(question, faqs)
+        human_state = detect_human_state(question)
 
-        if direct_alert:
+        direct_contact_answer = direct_people_care_contact(question)
+        search_query = get_contextual_query(question)
+        faq, score, second_score = find_faq(search_query, faqs)
+
+        # Evita responder una FAQ si la coincidencia es débil o ambigua.
+        confident_match = (
+            faq is not None
+            and score >= 72
+            and (score - second_score >= 8 or score >= 88)
+        )
+
+        if is_bot_complaint(question):
+            answer = humanized_bot_complaint_response()
+
+            send_alert(
+                "[People Care] Disconformidad con el bot",
+                alert_body(
+                    question,
+                    answer,
+                    "RED_FLAG",
+                    "Disconformidad / experiencia del colaborador",
+                ),
+            )
+
+        elif human_state == "frustration":
+            answer = humanized_frustration_response()
+
+            send_alert(
+                "[People Care] Colaborador requiere atención personalizada",
+                alert_body(
+                    question,
+                    answer,
+                    "RED_FLAG",
+                    "Demora / frustración",
+                ),
+            )
+
+        elif direct_contact_answer:
+            answer = direct_contact_answer
+
+        elif direct_alert:
             answer = (
                 "Esta consulta requiere atención personalizada de People Care. "
                 "Voy a dejarla señalada para que el equipo pueda revisarla."
@@ -657,9 +886,13 @@ if send:
             )
 
         elif repeated:
+            name = st.session_state.get("nombre", "").strip()
+            prefix = f"{name}, " if name else ""
             answer = (
-                "Veo que necesitás más ayuda con este tema. "
-                "La consulta será derivada a People Care para atención personalizada."
+                f"{prefix}veo que este tema sigue sin quedar resuelto. "
+                "No quiero que tengas que seguir repitiendo la misma consulta, "
+                "así que voy a dejarla marcada para atención personalizada de People Care. "
+                "También podés escribir a ppc@voolkia.com."
             )
 
             send_alert(
@@ -672,25 +905,26 @@ if send:
                 ),
             )
 
-        elif faq is not None and score >= MATCH_THRESHOLD:
+        elif confident_match:
             answer = str(faq["Respuesta"])
 
         else:
-            answer = (
-                "No encontré una respuesta suficientemente clara en la base de "
-                "People Care. Prefiero no darte información incorrecta. "
-                "La consulta quedará identificada para que People Care pueda revisarla."
-            )
+            # Si hay una coincidencia débil/ambigua, primero pide aclaración.
+            # Así evita "delirar" con una FAQ que no corresponde.
+            if faq is not None and score >= 55:
+                answer = humanized_clarification()
+            else:
+                answer = humanized_no_answer(question)
 
-            send_alert(
-                "[People Care] Nueva consulta sin respuesta",
-                alert_body(
-                    question,
-                    answer,
-                    "SIN_RESPUESTA",
-                    "Sin respuesta",
-                ),
-            )
+                send_alert(
+                    "[People Care] Nueva consulta sin respuesta",
+                    alert_body(
+                        question,
+                        answer,
+                        "SIN_RESPUESTA",
+                        "Sin respuesta",
+                    ),
+                )
 
         st.session_state.messages.append(
             {"role": "assistant", "content": answer}
