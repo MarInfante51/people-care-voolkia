@@ -1,3 +1,4 @@
+
 import io
 import re
 import json
@@ -671,62 +672,48 @@ if "question_counts" not in st.session_state:
 # INGRESO DEL COLABORADOR
 # =========================================================
 if not st.session_state.identified:
-    st.markdown(
-        """
-<div class="pc-access-grid">
-    <div class="pc-access-card">
-        <div class="pc-eyebrow">ASISTENTE PEOPLE CARE</div>
-        <div class="pc-access-title">Resolvé consultas frecuentes de HR en pocos minutos</div>
-        <div class="pc-access-copy">
-            El asistente responde únicamente con información validada por People Care.
-            Si no encuentra una respuesta segura, no inventa y deriva el tema para revisión.
-        </div>
-
-        <div class="pc-mini-item">
-            <span class="pc-mini-dot"></span>
-            <span>Vacaciones, licencias, recibos, beneficios, prepaga, referidos y capacitaciones.</span>
-        </div>
-        <div class="pc-mini-item">
-            <span class="pc-mini-dot"></span>
-            <span>Consultas operativas frecuentes y orientación sobre circuitos internos.</span>
-        </div>
-        <div class="pc-mini-item">
-            <span class="pc-mini-dot"></span>
-            <span>Respuestas inmediatas usando la base oficial de People Care.</span>
-        </div>
-
-        <div class="pc-human-box">
-            <div class="pc-human-title">¿Necesitás atención personalizada?</div>
-            <div class="pc-human-copy">
-                Para casos personales, sensibles o situaciones que requieren seguimiento,
-                podés escribir directamente a <strong>ppc@voolkia.com</strong>.
-            </div>
-        </div>
-
-        <div class="pc-hours">
-            <strong>HR Office Hours</strong><br>
-            Todos los viernes de <strong>10 a 12 hs</strong> tenés un espacio abierto
-            para conversar directamente con el equipo de HR.
-        </div>
-
-        <div class="pc-safe">
-            No ingreses contraseñas, datos bancarios, documentación médica
-            ni otra información sensible.
-        </div>
-    </div>
-
-    <div class="pc-access-soft">
-        <div class="pc-eyebrow">INGRESO</div>
-        <div class="pc-access-title">Antes de comenzar</div>
-        <div class="pc-access-copy">
-            Identificate para que People Care pueda contextualizar tu consulta
-            si necesitás atención personalizada.
-        </div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True,
+    access_html = (
+        '<div class="pc-access-grid">'
+        '<div class="pc-access-card">'
+        '<div class="pc-eyebrow">ASISTENTE PEOPLE CARE</div>'
+        '<div class="pc-access-title">Resolvé consultas frecuentes de HR en pocos minutos</div>'
+        '<div class="pc-access-copy">'
+        'El asistente responde únicamente con información validada por People Care. '
+        'Si no encuentra una respuesta segura, no inventa y deriva el tema para revisión.'
+        '</div>'
+        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
+        '<span>Vacaciones, licencias, recibos, beneficios, prepaga, referidos y capacitaciones.</span></div>'
+        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
+        '<span>Consultas operativas frecuentes y orientación sobre circuitos internos.</span></div>'
+        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
+        '<span>Respuestas inmediatas usando la base oficial de People Care.</span></div>'
+        '<div class="pc-human-box">'
+        '<div class="pc-human-title">¿Necesitás atención personalizada?</div>'
+        '<div class="pc-human-copy">'
+        'Para casos personales, sensibles o situaciones que requieren seguimiento, '
+        'podés escribir directamente a <strong>ppc@voolkia.com</strong>.'
+        '</div></div>'
+        '<div class="pc-hours">'
+        '<strong>HR Office Hours</strong><br>'
+        'Todos los viernes de <strong>10 a 12 hs</strong> tenés un espacio abierto '
+        'para conversar directamente con el equipo de HR.'
+        '</div>'
+        '<div class="pc-safe">'
+        'No ingreses contraseñas, datos bancarios, documentación médica ni otra información sensible.'
+        '</div>'
+        '</div>'
+        '<div class="pc-access-soft">'
+        '<div class="pc-eyebrow">INGRESO</div>'
+        '<div class="pc-access-title">Antes de comenzar</div>'
+        '<div class="pc-access-copy">'
+        'Identificate para que People Care pueda contextualizar tu consulta '
+        'si necesitás atención personalizada.'
+        '</div>'
+        '</div>'
+        '</div>'
     )
+
+    st.markdown(access_html, unsafe_allow_html=True)
 
     st.write("")
 
