@@ -1,4 +1,3 @@
-
 import io
 import re
 import json
@@ -229,7 +228,123 @@ st.markdown(
             max-width: 100%;
         }
     }
-    </style>
+    
+    .pc-access-grid {
+        display: grid;
+        grid-template-columns: 1.05fr .95fr;
+        gap: 22px;
+        margin-top: 8px;
+    }
+
+    .pc-access-card {
+        background: #FFFFFF;
+        border: 1px solid #E7DED9;
+        border-radius: 24px;
+        padding: 26px;
+        box-shadow: 0 10px 28px rgba(36,3,0,.05);
+    }
+
+    .pc-access-soft {
+        background: linear-gradient(180deg, #FFF8F3 0%, #FFFFFF 100%);
+        border: 1px solid #F2D6C3;
+        border-radius: 24px;
+        padding: 26px;
+        box-shadow: 0 10px 28px rgba(36,3,0,.04);
+    }
+
+    .pc-eyebrow {
+        display: inline-block;
+        background: #240300;
+        color: #FFFFFF;
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: .74rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        margin-bottom: 14px;
+    }
+
+    .pc-access-title {
+        color: #240300;
+        font-size: 1.55rem;
+        font-weight: 800;
+        line-height: 1.18;
+        margin-bottom: 8px;
+    }
+
+    .pc-access-copy {
+        color: #6E625D;
+        font-size: .94rem;
+        line-height: 1.55;
+        margin-bottom: 16px;
+    }
+
+    .pc-mini-item {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        color: #443936;
+        font-size: .9rem;
+        line-height: 1.45;
+    }
+
+    .pc-mini-dot {
+        width: 8px;
+        height: 8px;
+        min-width: 8px;
+        border-radius: 50%;
+        background: #FF7000;
+        margin-top: 6px;
+    }
+
+    .pc-human-box {
+        background: #240300;
+        color: #FFFFFF;
+        border-radius: 18px;
+        padding: 17px 18px;
+        margin-top: 18px;
+    }
+
+    .pc-human-title {
+        font-size: .95rem;
+        font-weight: 800;
+        margin-bottom: 6px;
+    }
+
+    .pc-human-copy {
+        font-size: .86rem;
+        line-height: 1.5;
+        color: #F7EEE9;
+    }
+
+    .pc-hours {
+        background: #FFF0E4;
+        border: 1px solid #FFD0AF;
+        border-radius: 18px;
+        padding: 16px 17px;
+        margin-top: 14px;
+        color: #5B4032;
+    }
+
+    .pc-hours strong {
+        color: #240300;
+    }
+
+    .pc-safe {
+        margin-top: 14px;
+        color: #796D67;
+        font-size: .78rem;
+        line-height: 1.45;
+    }
+
+    @media (max-width: 800px) {
+        .pc-access-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+</style>
     """,
     unsafe_allow_html=True,
 )
@@ -556,71 +671,99 @@ if "question_counts" not in st.session_state:
 # INGRESO DEL COLABORADOR
 # =========================================================
 if not st.session_state.identified:
-    col_form, col_info = st.columns([1.1, 0.9], gap="large")
+    st.markdown(
+        """
+<div class="pc-access-grid">
+    <div class="pc-access-card">
+        <div class="pc-eyebrow">ASISTENTE PEOPLE CARE</div>
+        <div class="pc-access-title">Resolvé consultas frecuentes de HR en pocos minutos</div>
+        <div class="pc-access-copy">
+            El asistente responde únicamente con información validada por People Care.
+            Si no encuentra una respuesta segura, no inventa y deriva el tema para revisión.
+        </div>
 
-    with col_form:
-        with st.container(border=True):
-            st.caption("INGRESO DE COLABORADOR")
-            st.subheader("Antes de comenzar")
-            st.write(
-                "Identificate para que People Care pueda contextualizar tu consulta "
-                "si necesitás atención personalizada."
+        <div class="pc-mini-item">
+            <span class="pc-mini-dot"></span>
+            <span>Vacaciones, licencias, recibos, beneficios, prepaga, referidos y capacitaciones.</span>
+        </div>
+        <div class="pc-mini-item">
+            <span class="pc-mini-dot"></span>
+            <span>Consultas operativas frecuentes y orientación sobre circuitos internos.</span>
+        </div>
+        <div class="pc-mini-item">
+            <span class="pc-mini-dot"></span>
+            <span>Respuestas inmediatas usando la base oficial de People Care.</span>
+        </div>
+
+        <div class="pc-human-box">
+            <div class="pc-human-title">¿Necesitás atención personalizada?</div>
+            <div class="pc-human-copy">
+                Para casos personales, sensibles o situaciones que requieren seguimiento,
+                podés escribir directamente a <strong>ppc@voolkia.com</strong>.
+            </div>
+        </div>
+
+        <div class="pc-hours">
+            <strong>HR Office Hours</strong><br>
+            Todos los viernes de <strong>10 a 12 hs</strong> tenés un espacio abierto
+            para conversar directamente con el equipo de HR.
+        </div>
+
+        <div class="pc-safe">
+            No ingreses contraseñas, datos bancarios, documentación médica
+            ni otra información sensible.
+        </div>
+    </div>
+
+    <div class="pc-access-soft">
+        <div class="pc-eyebrow">INGRESO</div>
+        <div class="pc-access-title">Antes de comenzar</div>
+        <div class="pc-access-copy">
+            Identificate para que People Care pueda contextualizar tu consulta
+            si necesitás atención personalizada.
+        </div>
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    st.write("")
+
+    form_col, _ = st.columns([0.58, 0.42])
+
+    with form_col:
+        with st.form("identificacion"):
+            nombre = st.text_input(
+                "Nombre *",
+                placeholder="Ej.: Marcela",
             )
 
-            with st.form("identificacion"):
-                nombre = st.text_input(
-                    "Nombre *",
-                    placeholder="Ej.: Marcela",
-                )
-
-                apellido = st.text_input(
-                    "Apellido *",
-                    placeholder="Ej.: Infante",
-                )
-
-                proyecto = st.selectbox(
-                    "Proyecto / Cliente asignado *",
-                    ["Seleccionar..."] + project_list,
-                )
-
-                otro = ""
-                if proyecto == "Otro":
-                    otro = st.text_input(
-                        "Indicá tu proyecto / cliente *",
-                        placeholder="Ej.: Cliente / proyecto",
-                    )
-
-                accepted = st.checkbox(
-                    "Entiendo que este asistente responde consultas generales "
-                    "y que los casos personales pueden ser derivados a People Care."
-                )
-
-                submit = st.form_submit_button(
-                    "Ingresar a People Care",
-                    use_container_width=True,
-                )
-
-    with col_info:
-        with st.container(border=True):
-            st.subheader("¿Qué podés consultar?")
-            st.markdown(
-                """
-                - Vacaciones, licencias y certificados.
-                - Recibos de sueldo y consultas frecuentes.
-                - Beneficios, prepaga y referidos.
-                - Capacitaciones y Voolkia Learning.
-                - Cambio de domicilio, equipamiento y consultas operativas.
-                """
+            apellido = st.text_input(
+                "Apellido *",
+                placeholder="Ej.: Infante",
             )
 
-            st.info(
-                "Si el asistente no encuentra una respuesta clara, no inventará "
-                "información. La consulta podrá ser derivada a People Care para revisión."
+            proyecto = st.selectbox(
+                "Proyecto / Cliente asignado *",
+                ["Seleccionar..."] + project_list,
             )
 
-            st.caption(
-                "No ingreses contraseñas, documentación médica, certificados, "
-                "datos bancarios ni otra información sensible."
+            otro = ""
+            if proyecto == "Otro":
+                otro = st.text_input(
+                    "Indicá tu proyecto / cliente *",
+                    placeholder="Ej.: Cliente / proyecto",
+                )
+
+            accepted = st.checkbox(
+                "Entiendo que este asistente responde consultas generales "
+                "y que los casos personales pueden ser derivados a People Care."
+            )
+
+            submit = st.form_submit_button(
+                "Ingresar al asistente",
+                use_container_width=True,
             )
 
     if submit:
