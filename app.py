@@ -31,6 +31,7 @@ FAQ_LOCAL_FILE = "People_Care_Voolkia_Base_Conocimiento.xlsx"
 MATCH_THRESHOLD = 62
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-3.5-flash-lite"
+APPS_SCRIPT_URL = st.secrets.get("APPS_SCRIPT_URL", "")
 
 
 # =========================================================
@@ -628,6 +629,69 @@ Respuesta del bot:
 """
 
 
+def register_interaction(
+    question,
+    answer,
+    status,
+    red_flag=False,
+    alert_reason="",
+):
+    """
+    Registra cada interacción en Google Sheets mediante Apps Script.
+    Si red_flag=True, Apps Script envía el mail inmediato.
+    """
+    if not APPS_SCRIPT_URL:
+        return False
+
+    status_map = {
+        "answered": "RESPONDIDA",
+        "clarify": "ACLARAR",
+        "escalate": "SIN_RESPUESTA",
+        "error": "ERROR_IA",
+    }
+
+    estado = status_map.get(status, str(status).upper())
+
+    if red_flag:
+        tipo_alerta = "RED_FLAG"
+        detalle_alerta = alert_reason or "Requiere atención personalizada"
+    elif status == "escalate":
+        tipo_alerta = "SIN_RESPUESTA"
+        detalle_alerta = alert_reason or "Consulta sin respuesta validada"
+    else:
+        tipo_alerta = ""
+        detalle_alerta = ""
+
+    payload = {
+        "nombre": st.session_state.nombre,
+        "apellido": st.session_state.apellido,
+        "proyecto_cliente": st.session_state.proyecto,
+        "pregunta": question,
+        "faq_id": "",
+        "respuesta": answer,
+        "estado": estado,
+        "tipo_alerta": tipo_alerta,
+        "detalle_alerta": detalle_alerta,
+        "red_flag": bool(red_flag),
+    }
+
+    try:
+        response = requests.post(
+            APPS_SCRIPT_URL,
+            json=payload,
+            timeout=15,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+
+        return bool(data.get("ok", False))
+
+    except Exception:
+        # El bot sigue respondiendo aunque falle el registro.
+        return False
+
+
 # =========================================================
 # CARGA DE LA BASE
 # =========================================================
@@ -894,41 +958,31 @@ if send:
             red_flag = ai_result["red_flag"]
             alert_reason = ai_result["alert_reason"]
 
-            # Alerta cuando Gemini identifica una situación sensible o
-            # cuando la base no permite resolver la consulta.
-            if red_flag or status == "escalate":
-                tipo = alert_reason or (
-                    "Consulta sin respuesta validada"
-                    if status == "escalate"
-                    else "Atención personalizada"
-                )
-
-                send_alert(
-                    f"[People Care] {tipo}",
-                    alert_body(
-                        question,
-                        answer,
-                        "RED_FLAG" if red_flag else "SIN_RESPUESTA",
-                        tipo,
-                    ),
-                )
+            # Registra TODAS las interacciones.
+            # Si red_flag=True, Apps Script envía además el mail inmediato.
+            register_interaction(
+                question=question,
+                answer=answer,
+                status=status,
+                red_flag=red_flag,
+                alert_reason=alert_reason,
+            )
 
         except Exception as error:
-            # Si Gemini falla, NO inventamos ni volvemos al fuzzy matching.
+            # Si Gemini falla, NO inventamos ni volvemos al matching anterior.
             answer = (
                 "En este momento no pude procesar tu consulta correctamente. "
                 "Prefiero no darte una respuesta que pueda ser incorrecta. "
                 "Podés intentar nuevamente o escribir a ppc@voolkia.com."
             )
 
-            send_alert(
-                "[People Care] Error del asistente",
-                alert_body(
-                    question,
-                    answer,
-                    "ERROR_IA",
-                    f"Error Gemini: {str(error)[:180]}",
-                ),
+            # También registramos el error para poder revisarlo.
+            register_interaction(
+                question=question,
+                answer=answer,
+                status="error",
+                red_flag=False,
+                alert_reason=f"Error Gemini: {str(error)[:180]}",
             )
 
         st.session_state.messages.append(
