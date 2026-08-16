@@ -643,14 +643,20 @@ def register_interaction(
     if not APPS_SCRIPT_URL:
         return False
 
-    status_map = {
-        "answered": "RESPONDIDA",
-        "clarify": "ACLARAR",
-        "escalate": "SIN_RESPUESTA",
-        "error": "ERROR_IA",
-    }
-
-    estado = status_map.get(status, str(status).upper())
+    # Estado del bot: diferencia claramente entre respuesta,
+    # aclaración, derivación humana y falta real de información.
+    if status == "answered":
+        estado = "RESUELTA_POR_BOT"
+    elif status == "clarify":
+        estado = "REQUIERE_ACLARACION"
+    elif status == "escalate" and red_flag:
+        estado = "DERIVADA_A_PPC"
+    elif status == "escalate":
+        estado = "SIN_RESPUESTA"
+    elif status == "error":
+        estado = "ERROR_IA"
+    else:
+        estado = str(status).upper()
 
     if red_flag:
         tipo_alerta = "RED_FLAG"
