@@ -1,6 +1,7 @@
 
 import io
 import re
+import json
 import smtplib
 import unicodedata
 from datetime import datetime
@@ -10,7 +11,8 @@ from html import escape
 import pandas as pd
 import requests
 import streamlit as st
-from rapidfuzz import fuzz
+from google import genai
+from google.genai import types
 
 
 # =========================================================
@@ -27,6 +29,8 @@ ALERT_EMAIL = st.secrets.get("ALERT_EMAIL", "marcela@voolkia.com")
 FAQ_DRIVE_FILE_ID = st.secrets.get("FAQ_DRIVE_FILE_ID", "")
 FAQ_LOCAL_FILE = "People_Care_Voolkia_Base_Conocimiento.xlsx"
 MATCH_THRESHOLD = 62
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 # =========================================================
@@ -288,12 +292,8 @@ def load_excel():
     return faqs, alertas, proyectos
 
 
-def find_faq(question, faqs):
-    q = normalize(question)
-    best = None
-    best_score = 0
-    second_score = 0
 
+def build_knowledge_base(faqs):
     active = faqs[
         faqs["Activo"]
         .astype(str)
@@ -301,212 +301,151 @@ def find_faq(question, faqs):
         .isin(["sí", "si", "true", "1"])
     ]
 
-    scores = []
-
+    blocks = []
     for _, row in active.iterrows():
-        searchable = (
-            f"{row['Pregunta']} "
-            f"{row.get('Palabras_clave', '')} "
-            f"{row.get('Categoría', '')}"
+        blocks.append(
+            f"ID: {row.get('ID', '')}\n"
+            f"CATEGORÍA: {row.get('Categoría', '')}\n"
+            f"PREGUNTA: {row.get('Pregunta', '')}\n"
+            f"RESPUESTA AUTORIZADA: {row.get('Respuesta', '')}\n"
+            f"PALABRAS CLAVE: {row.get('Palabras_clave', '')}"
         )
 
-        score = max(
-            fuzz.token_set_ratio(q, normalize(searchable)),
-            fuzz.partial_ratio(q, normalize(row["Pregunta"])),
-        )
-
-        scores.append((score, row))
-
-    scores.sort(key=lambda x: x[0], reverse=True)
-
-    if scores:
-        best_score, best = scores[0]
-
-    if len(scores) > 1:
-        second_score = scores[1][0]
-
-    return best, best_score, second_score
+    return "\n\n---\n\n".join(blocks)
 
 
-def is_contextual_followup(question):
-    q = normalize(question)
+def recent_conversation():
+    history = []
 
-    if len(q.split()) <= 7:
-        return True
+    # Últimos 8 mensajes son suficientes para mantener el hilo
+    # sin inflar innecesariamente el consumo de tokens.
+    for msg in st.session_state.messages[-8:]:
+        role = "COLABORADOR" if msg["role"] == "user" else "PEOPLE CARE"
+        history.append(f"{role}: {msg['content']}")
 
-    starters = (
-        "y como",
-        "como hago",
-        "como lo hago",
-        "como solicito",
-        "como pido",
-        "donde",
-        "y eso",
-        "y ahi",
-        "y despues",
-        "que hago",
-        "a quien",
-    )
-
-    return q.startswith(starters)
+    return "\n".join(history)
 
 
-def get_contextual_query(question):
+def ask_gemini(question, faqs):
     """
-    Para preguntas cortas o de seguimiento, agrega el último tema conversado.
-    No cambia la respuesta: solo mejora la búsqueda de la FAQ correcta.
+    Gemini interpreta lenguaje y contexto, pero la única fuente de verdad
+    permitida son las FAQs activas del Google Sheet.
     """
-    if not is_contextual_followup(question):
-        return question
-
-    previous_user = ""
-    previous_assistant = ""
-
-    for msg in reversed(st.session_state.messages[:-1]):
-        if not previous_assistant and msg["role"] == "assistant":
-            previous_assistant = str(msg["content"])
-        elif not previous_user and msg["role"] == "user":
-            previous_user = str(msg["content"])
-
-        if previous_user and previous_assistant:
-            break
-
-    context = f"{previous_user} {previous_assistant}".strip()
-
-    if context:
-        return f"{question} CONTEXTO ANTERIOR: {context}"
-
-    return question
-
-
-def direct_people_care_contact(question):
-    q = normalize(question)
-
-    mentions_people_care = (
-        "people care" in q
-        or "ppc" in q
-        or "recursos humanos" in q
-        or "rrhh" in q
-        or "hr" in q
-    )
-
-    contact_intent = any(
-        phrase in q
-        for phrase in [
-            "como contacto",
-            "como escribo",
-            "como solicito",
-            "como pido",
-            "como hablo",
-            "donde escribo",
-            "a que mail",
-            "cual es el mail",
-            "mail de",
-            "correo de",
-        ]
-    )
-
-    if mentions_people_care and contact_intent:
-        return (
-            "Podés contactar a People Care enviando un mail a "
-            "ppc@voolkia.com."
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "Falta GEMINI_API_KEY en los Secrets de Streamlit."
         )
 
-    return None
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    knowledge = build_knowledge_base(faqs)
+    conversation = recent_conversation()
 
+    system_instruction = """
+Sos el asistente virtual de People Care de Voolkia.
 
+OBJETIVO
+Ayudar a colaboradores de Voolkia a resolver consultas de HR de manera rápida,
+clara, cordial y natural.
 
-def detect_human_state(question):
-    q = normalize(question)
+REGLA MÁS IMPORTANTE
+La única fuente de verdad es la BASE DE CONOCIMIENTO AUTORIZADA que se incluye
+en cada solicitud. NO uses tu conocimiento general, NO completes información,
+NO supongas políticas de Voolkia y NO inventes datos.
 
-    frustration_terms = [
-        "no me responden",
-        "no me dan respuesta",
-        "nadie me responde",
-        "hace dias",
-        "hace 2 dias",
-        "hace 3 dias",
-        "hace 4 dias",
-        "hace una semana",
-        "estoy cansado",
-        "estoy cansada",
-        "estoy enojado",
-        "estoy enojada",
-        "estoy molesto",
-        "estoy molesta",
-        "esto no sirve",
-        "no sirve",
-        "boludear",
-        "me estan dando vueltas",
-        "me dan vueltas",
-        "quiero hablar con alguien",
-        "necesito hablar con alguien",
-    ]
+COMPORTAMIENTO
+- Entendé lenguaje cotidiano, errores de tipeo, frases breves y preguntas de seguimiento.
+- Conservá el contexto de la conversación. Ejemplo: si primero preguntan por prepaga
+  y luego dicen "¿y cómo lo hago?", entendé que siguen hablando de prepaga.
+- Si una consulta amplia coincide con varias FAQs, orientá al colaborador con opciones
+  concretas tomadas de la base. Ejemplo: "vacaciones" puede abrir cómo pedirlas o dónde
+  consultar días disponibles.
+- Si la respuesta está respaldada por la base, respondé de inmediato en lenguaje natural.
+- No copies mecánicamente la FAQ si podés expresarla de forma más conversacional,
+  pero nunca cambies su sentido.
+- Si la información NO está en la base, decilo claramente y no inventes.
+- Si falta contexto para decidir entre dos respuestas posibles, hacé UNA pregunta breve
+  de aclaración.
+- Si el colaborador expresa frustración, demora, enojo o pide hablar con alguien,
+  reconocé la situación con respeto y ofrecé People Care: ppc@voolkia.com.
+- No seas defensivo, robótico ni excesivamente formal.
+- Usá el nombre del colaborador con moderación; no hace falta repetirlo en cada mensaje.
+- Nunca pidas datos médicos, bancarios, contraseñas ni documentación sensible.
 
-    if any(term in q for term in frustration_terms):
-        return "frustration"
+ESTADOS
+answered: pudiste responder usando la base.
+clarify: necesitás una aclaración breve antes de responder.
+escalate: la base no contiene la respuesta o requiere atención personalizada.
 
-    return None
+RED FLAG
+Marcá red_flag=true cuando haya frustración relevante, reclamo, demora sin respuesta,
+problemas individuales de haberes, renuncia, conflicto, situación sensible o pedido
+explícito de atención humana.
 
+Respondé SIEMPRE en JSON siguiendo el esquema solicitado.
+"""
 
-def humanized_no_answer(question):
-    name = st.session_state.get("nombre", "").strip()
-    prefix = f"{name}, " if name else ""
+    prompt = f"""
+COLABORADOR
+Nombre: {st.session_state.nombre}
+Apellido: {st.session_state.apellido}
+Proyecto/Cliente: {st.session_state.proyecto}
 
-    return (
-        f"{prefix}entiendo la consulta. En este momento no tengo una respuesta "
-        "validada sobre ese tema en la base de People Care, y prefiero no darte "
-        "información que pueda ser incorrecta. Voy a dejarla identificada para "
-        "que People Care pueda revisarla."
+BASE DE CONOCIMIENTO AUTORIZADA
+{knowledge}
+
+CONVERSACIÓN RECIENTE
+{conversation}
+
+NUEVA CONSULTA
+{question}
+"""
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "answer": {
+                "type": "string",
+                "description": "Respuesta natural para mostrar al colaborador."
+            },
+            "status": {
+                "type": "string",
+                "enum": ["answered", "clarify", "escalate"]
+            },
+            "red_flag": {
+                "type": "boolean"
+            },
+            "alert_reason": {
+                "type": "string",
+                "description": "Motivo breve de alerta; vacío si no corresponde."
+            }
+        },
+        "required": ["answer", "status", "red_flag", "alert_reason"]
+    }
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+            response_schema=schema,
+            temperature=0.2,
+            max_output_tokens=450,
+        ),
     )
 
+    if not response.text:
+        raise RuntimeError("Gemini no devolvió una respuesta.")
 
-def humanized_clarification():
-    name = st.session_state.get("nombre", "").strip()
-    prefix = f"{name}, " if name else ""
+    data = json.loads(response.text)
 
-    return (
-        f"{prefix}quiero asegurarme de entenderte bien para no responderte cualquier cosa. "
-        "¿Podés contarme un poco más sobre qué necesitás?"
-    )
+    return {
+        "answer": str(data.get("answer", "")).strip(),
+        "status": str(data.get("status", "escalate")).strip(),
+        "red_flag": bool(data.get("red_flag", False)),
+        "alert_reason": str(data.get("alert_reason", "")).strip(),
+    }
 
-
-def humanized_frustration_response():
-    name = st.session_state.get("nombre", "").strip()
-    prefix = f"{name}, " if name else ""
-
-    return (
-        f"{prefix}entiendo la frustración. Si ya venís esperando una respuesta, "
-        "no quiero que sigas dando vueltas con el mismo tema. Voy a dejar esta "
-        "situación marcada para atención personalizada de People Care. "
-        "Si querés, también podés escribir directamente a ppc@voolkia.com."
-    )
-
-
-def humanized_bot_complaint_response():
-    name = st.session_state.get("nombre", "").strip()
-    prefix = f"{name}, " if name else ""
-
-    return (
-        f"{prefix}entiendo lo que decís. La idea de este bot es justamente darte "
-        "respuestas rápidas cuando la información está validada y no hacerte perder "
-        "tiempo. Si no tengo una respuesta segura, prefiero decirlo y derivar el tema "
-        "a People Care antes que inventar. Podés contarme qué necesitás resolver y "
-        "lo intento de nuevo."
-    )
-
-
-def is_bot_complaint(question):
-    q = normalize(question)
-    complaint_terms = [
-        "este bot",
-        "el bot",
-        "esto no sirve",
-        "boludear",
-        "me hace perder tiempo",
-        "perder tiempo",
-    ]
-    return any(term in q for term in complaint_terms)
 
 def detect_alert(question, alertas):
     q = normalize(question)
@@ -824,107 +763,50 @@ if send:
             st.session_state.question_counts.get(normalized_question, 0) + 1
         )
 
-        direct_alert = detect_alert(question, alertas)
-        repeated = st.session_state.question_counts[normalized_question] >= 3
-        human_state = detect_human_state(question)
+        # Gemini interpreta intención + contexto usando SOLO el Google Sheet.
+        try:
+            ai_result = ask_gemini(question, faqs)
+            answer = ai_result["answer"]
+            status = ai_result["status"]
+            red_flag = ai_result["red_flag"]
+            alert_reason = ai_result["alert_reason"]
 
-        direct_contact_answer = direct_people_care_contact(question)
-        search_query = get_contextual_query(question)
-        faq, score, second_score = find_faq(search_query, faqs)
-
-        # Evita responder una FAQ si la coincidencia es débil o ambigua.
-        confident_match = (
-            faq is not None
-            and score >= 72
-            and (score - second_score >= 8 or score >= 88)
-        )
-
-        if is_bot_complaint(question):
-            answer = humanized_bot_complaint_response()
-
-            send_alert(
-                "[People Care] Disconformidad con el bot",
-                alert_body(
-                    question,
-                    answer,
-                    "RED_FLAG",
-                    "Disconformidad / experiencia del colaborador",
-                ),
-            )
-
-        elif human_state == "frustration":
-            answer = humanized_frustration_response()
-
-            send_alert(
-                "[People Care] Colaborador requiere atención personalizada",
-                alert_body(
-                    question,
-                    answer,
-                    "RED_FLAG",
-                    "Demora / frustración",
-                ),
-            )
-
-        elif direct_contact_answer:
-            answer = direct_contact_answer
-
-        elif direct_alert:
-            answer = (
-                "Esta consulta requiere atención personalizada de People Care. "
-                "Voy a dejarla señalada para que el equipo pueda revisarla."
-            )
-
-            send_alert(
-                f"[People Care] Alerta {direct_alert['prioridad']} - "
-                f"{direct_alert['tipo']}",
-                alert_body(
-                    question,
-                    answer,
-                    "RED_FLAG",
-                    direct_alert["tipo"],
-                ),
-            )
-
-        elif repeated:
-            name = st.session_state.get("nombre", "").strip()
-            prefix = f"{name}, " if name else ""
-            answer = (
-                f"{prefix}veo que este tema sigue sin quedar resuelto. "
-                "No quiero que tengas que seguir repitiendo la misma consulta, "
-                "así que voy a dejarla marcada para atención personalizada de People Care. "
-                "También podés escribir a ppc@voolkia.com."
-            )
-
-            send_alert(
-                "[People Care] Consulta reiterada",
-                alert_body(
-                    question,
-                    answer,
-                    "REITERADA",
-                    "Consulta reiterada",
-                ),
-            )
-
-        elif confident_match:
-            answer = str(faq["Respuesta"])
-
-        else:
-            # Si hay una coincidencia débil/ambigua, primero pide aclaración.
-            # Así evita "delirar" con una FAQ que no corresponde.
-            if faq is not None and score >= 55:
-                answer = humanized_clarification()
-            else:
-                answer = humanized_no_answer(question)
+            # Alerta cuando Gemini identifica una situación sensible o
+            # cuando la base no permite resolver la consulta.
+            if red_flag or status == "escalate":
+                tipo = alert_reason or (
+                    "Consulta sin respuesta validada"
+                    if status == "escalate"
+                    else "Atención personalizada"
+                )
 
                 send_alert(
-                    "[People Care] Nueva consulta sin respuesta",
+                    f"[People Care] {tipo}",
                     alert_body(
                         question,
                         answer,
-                        "SIN_RESPUESTA",
-                        "Sin respuesta",
+                        "RED_FLAG" if red_flag else "SIN_RESPUESTA",
+                        tipo,
                     ),
                 )
+
+        except Exception as error:
+            # Si Gemini falla, NO inventamos ni volvemos al fuzzy matching.
+            answer = (
+                "En este momento no pude procesar tu consulta correctamente. "
+                "Prefiero no darte una respuesta que pueda ser incorrecta. "
+                "Podés intentar nuevamente o escribir a ppc@voolkia.com."
+            )
+
+            send_alert(
+                "[People Care] Error del asistente",
+                alert_body(
+                    question,
+                    answer,
+                    "ERROR_IA",
+                    f"Error Gemini: {str(error)[:180]}",
+                ),
+            )
 
         st.session_state.messages.append(
             {"role": "assistant", "content": answer}
