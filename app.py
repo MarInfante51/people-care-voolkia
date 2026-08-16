@@ -672,86 +672,79 @@ if "question_counts" not in st.session_state:
 # INGRESO DEL COLABORADOR
 # =========================================================
 if not st.session_state.identified:
-    access_html = (
-        '<div class="pc-access-grid">'
-        '<div class="pc-access-card">'
-        '<div class="pc-eyebrow">ASISTENTE PEOPLE CARE</div>'
-        '<div class="pc-access-title">Resolvé consultas frecuentes de HR en pocos minutos</div>'
-        '<div class="pc-access-copy">'
-        'El asistente responde únicamente con información validada por People Care. '
-        'Si no encuentra una respuesta segura, no inventa y deriva el tema para revisión.'
-        '</div>'
-        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
-        '<span>Vacaciones, licencias, recibos, beneficios, prepaga, referidos y capacitaciones.</span></div>'
-        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
-        '<span>Consultas operativas frecuentes y orientación sobre circuitos internos.</span></div>'
-        '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
-        '<span>Respuestas inmediatas usando la base oficial de People Care.</span></div>'
-        '<div class="pc-human-box">'
-        '<div class="pc-human-title">¿Necesitás atención personalizada?</div>'
-        '<div class="pc-human-copy">'
-        'Para casos personales, sensibles o situaciones que requieren seguimiento, '
-        'podés escribir directamente a <strong>ppc@voolkia.com</strong>.'
-        '</div></div>'
-        '<div class="pc-hours">'
-        '<strong>HR Office Hours</strong><br>'
-        'Todos los viernes de <strong>10 a 12 hs</strong> tenés un espacio abierto '
-        'para conversar directamente con el equipo de HR.'
-        '</div>'
-        '<div class="pc-safe">'
-        'No ingreses contraseñas, datos bancarios, documentación médica ni otra información sensible.'
-        '</div>'
-        '</div>'
-        '<div class="pc-access-soft">'
-        '<div class="pc-eyebrow">INGRESO</div>'
-        '<div class="pc-access-title">Antes de comenzar</div>'
-        '<div class="pc-access-copy">'
-        'Identificate para que People Care pueda contextualizar tu consulta '
-        'si necesitás atención personalizada.'
-        '</div>'
-        '</div>'
-        '</div>'
-    )
+    col_info, col_form = st.columns([0.95, 1.05], gap="large")
 
-    st.markdown(access_html, unsafe_allow_html=True)
+    with col_info:
+        info_html = (
+            '<div class="pc-access-card">'
+            '<div class="pc-eyebrow">ASISTENTE PEOPLE CARE</div>'
+            '<div class="pc-access-title">Resolvé consultas frecuentes de HR de forma simple</div>'
+            '<div class="pc-access-copy">'
+            'El asistente responde con información validada por People Care. '
+            'Si no encuentra una respuesta segura, no inventa.'
+            '</div>'
+            '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
+            '<span>Vacaciones, licencias, recibos, beneficios y prepaga.</span></div>'
+            '<div class="pc-mini-item"><span class="pc-mini-dot"></span>'
+            '<span>Referidos, capacitaciones y consultas operativas.</span></div>'
+            '<div class="pc-human-box">'
+            '<div class="pc-human-title">¿Preferís hablar con People Care?</div>'
+            '<div class="pc-human-copy">'
+            'Para casos personales o que requieren seguimiento: '
+            '<strong>ppc@voolkia.com</strong>'
+            '</div></div>'
+            '<div class="pc-hours">'
+            '<strong>HR Office Hours</strong><br>'
+            'Viernes de <strong>10 a 12 hs</strong> · espacio abierto para conversar directamente con HR.'
+            '</div>'
+            '<div class="pc-safe">'
+            'No ingreses contraseñas, datos bancarios ni documentación médica.'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(info_html, unsafe_allow_html=True)
 
-    st.write("")
-
-    form_col, _ = st.columns([0.58, 0.42])
-
-    with form_col:
-        with st.form("identificacion"):
-            nombre = st.text_input(
-                "Nombre *",
-                placeholder="Ej.: Marcela",
+    with col_form:
+        with st.container(border=True):
+            st.caption("INGRESO AL ASISTENTE")
+            st.subheader("¿Empezamos?")
+            st.write(
+                "Ingresá tus datos para que People Care pueda contextualizar "
+                "la consulta si necesitás atención personalizada."
             )
 
-            apellido = st.text_input(
-                "Apellido *",
-                placeholder="Ej.: Infante",
-            )
-
-            proyecto = st.selectbox(
-                "Proyecto / Cliente asignado *",
-                ["Seleccionar..."] + project_list,
-            )
-
-            otro = ""
-            if proyecto == "Otro":
-                otro = st.text_input(
-                    "Indicá tu proyecto / cliente *",
-                    placeholder="Ej.: Cliente / proyecto",
+            with st.form("identificacion"):
+                nombre = st.text_input(
+                    "Nombre *",
+                    placeholder="Ej.: Marcela",
                 )
 
-            accepted = st.checkbox(
-                "Entiendo que este asistente responde consultas generales "
-                "y que los casos personales pueden ser derivados a People Care."
-            )
+                apellido = st.text_input(
+                    "Apellido *",
+                    placeholder="Ej.: Infante",
+                )
 
-            submit = st.form_submit_button(
-                "Ingresar al asistente",
-                use_container_width=True,
-            )
+                proyecto = st.selectbox(
+                    "Proyecto / Cliente asignado *",
+                    ["Seleccionar..."] + project_list,
+                )
+
+                otro = ""
+                if proyecto == "Otro":
+                    otro = st.text_input(
+                        "Indicá tu proyecto / cliente *",
+                        placeholder="Ej.: Cliente / proyecto",
+                    )
+
+                accepted = st.checkbox(
+                    "Entiendo que este asistente responde consultas generales "
+                    "y que los casos personales pueden ser derivados a People Care."
+                )
+
+                submit = st.form_submit_button(
+                    "Ingresar al asistente",
+                    use_container_width=True,
+                )
 
     if submit:
         final_project = otro.strip() if proyecto == "Otro" else proyecto
